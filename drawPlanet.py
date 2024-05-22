@@ -182,13 +182,14 @@ def pickPlanet(x, y):
     return None
 
 def main():
-    global focus_object
+    global focus_object, prev_mouse_pos
     pg.init()
     display = (800, 600)
     pg.display.set_mode(display, pg.DOUBLEBUF | pg.OPENGL)
     pg.display.set_caption("Solar System Simulation")
     InitGL(*display)
     x = y = 0
+    prev_mouse_pos = None
     while True:
         pg.time.Clock().tick(60)
         for event in pg.event.get():
@@ -211,6 +212,15 @@ def main():
                 if event.button == 1:  # Left mouse button
                     mouse_x, mouse_y = pg.mouse.get_pos()
                     focus_object = pickPlanet(mouse_x, mouse_y)
+                    prev_mouse_pos = (mouse_x, mouse_y)
+            if event.type == pg.MOUSEMOTION and pg.mouse.get_pressed()[0]:
+                if prev_mouse_pos:
+                    current_mouse_pos = pg.mouse.get_pos()
+                    dx = current_mouse_pos[0] - prev_mouse_pos[0]
+                    dy = current_mouse_pos[1] - prev_mouse_pos[1]
+                    prev_mouse_pos = current_mouse_pos
+                    y += dx * 0.1  # Adjust the multiplier for sensitivity
+                    x -= dy * 0.1  # Adjust the multiplier for sensitivity
 
         DrawGLScene(x, y)
         pg.display.flip()
