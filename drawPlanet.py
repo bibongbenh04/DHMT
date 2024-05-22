@@ -220,7 +220,7 @@ def main():
                     dy = current_mouse_pos[1] - prev_mouse_pos[1]
                     prev_mouse_pos = current_mouse_pos
                     y += dx * 0.1  # Adjust the multiplier for sensitivity
-                    x -= dy * 0.1  # Adjust the multiplier for sensitivity
+                    x += dy * 0.1  # Adjust the multiplier for sensitivity
 
         DrawGLScene(x, y)
         pg.display.flip()
