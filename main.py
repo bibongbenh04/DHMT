@@ -1,22 +1,23 @@
 import pygame
+from pygame.locals import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
 import math
 
 pygame.init()
 
 WIDTH, HEIGHT = 1600, 1600
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Solar System Simulation")
+WIN = pygame.display.set_mode((WIDTH, HEIGHT), DOUBLEBUF | OPENGL)
+pygame.display.set_caption("Galaxy Simulator")
 
-WHITE = (255, 255, 255)
-YELLOW = (255, 255, 0)
-BLUE = (100, 149, 237)
-RED = (188, 39, 50)
-DARK_GREY = (80, 78, 81)
-ORANGE = (255, 165, 0)
-LIGHT_BLUE = (173, 216, 230)
-LIGHT_GREY = (211, 211, 211)
-
-FONT = pygame.font.SysFont("comicsans", 16)
+WHITE = (1, 1, 1)
+YELLOW = (1, 1, 0)
+BLUE = (0.39, 0.58, 0.93)
+RED = (0.74, 0.15, 0.2)
+DARK_GREY = (0.31, 0.31, 0.32)
+ORANGE = (1, 0.65, 0)
+LIGHT_BLUE = (0.68, 0.85, 0.9)
+LIGHT_GREY = (0.83, 0.83, 0.83)
 
 class Planet:
     AU = 149.6e6 * 1000
@@ -38,25 +39,20 @@ class Planet:
         self.x_vel = 0
         self.y_vel = 0
 
-    def draw(self, win):
-        x = self.x * self.SCALE + WIDTH / 2
-        y = self.y * self.SCALE + HEIGHT / 2
+    def draw(self):
+        glColor3f(*self.color)
+        glBegin(GL_POLYGON)
+        for i in range(360):
+            angle = math.radians(i)
+            glVertex2f(self.x * self.SCALE + self.radius * math.cos(angle), self.y * self.SCALE + self.radius * math.sin(angle))
+        glEnd()
 
         if len(self.orbit) > 2:
-            updated_points = []
+            glBegin(GL_LINE_STRIP)
             for point in self.orbit:
                 x, y = point
-                x = x * self.SCALE + WIDTH / 2
-                y = y * self.SCALE + HEIGHT / 2
-                updated_points.append((x, y))
-
-            pygame.draw.lines(win, self.color, False, updated_points, 2)
-
-        pygame.draw.circle(win, self.color, (int(x), int(y)), self.radius)
-        
-        if not self.sun:
-            distance_text = FONT.render(f"{round(self.distance_to_sun/1000, 1)}km", 1, WHITE)
-            win.blit(distance_text, (x - distance_text.get_width()/2, y - distance_text.get_height()/2))
+                glVertex2f(x * self.SCALE, y * self.SCALE)
+            glEnd()
 
     def attraction(self, other):
         other_x, other_y = other.x, other.y
@@ -124,9 +120,11 @@ def main():
 
     planets = [sun, earth, mars, mercury, venus, jupiter, saturn, uranus, neptune]
 
+    glOrtho(-WIDTH//2, WIDTH//2, -HEIGHT//2, HEIGHT//2, -1, 1)
+
     while run:
         clock.tick(60)
-        WIN.fill((0, 0, 0))
+        glClear(GL_COLOR_BUFFER_BIT)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -134,9 +132,9 @@ def main():
 
         for planet in planets:
             planet.update_position(planets)
-            planet.draw(WIN)
+            planet.draw()
 
-        pygame.display.update()
+        pygame.display.flip()
 
     pygame.quit()
 
