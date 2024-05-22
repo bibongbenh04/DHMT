@@ -1,141 +1,170 @@
-import pygame
-from pygame.locals import *
+import pygame as pg
 from OpenGL.GL import *
 from OpenGL.GLU import *
-import math
+from PIL import Image
 
-pygame.init()
+textures = {}
+LightAmb = (0.7, 0.7, 0.7)
+LightDif = (1.0, 1.0, 0.0)
+LightPos = (4.0, 4.0, 6.0, 1.0)
+earth_rot = 0.0
+moon_rot = 0.0
+year = 0
+day = 0
 
-WIDTH, HEIGHT = 1600, 1600
-WIN = pygame.display.set_mode((WIDTH, HEIGHT), DOUBLEBUF | OPENGL)
-pygame.display.set_caption("Galaxy Simulator")
+def DrawGLScene(x, y):
+    global earth_rot, moon_rot, year, day
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    glLoadIdentity()
+    glRotatef(x, 1, 0, 0)
+    glRotatef(y, 0, 1, 0)
+    glTranslatef(0, 0, -10)
 
-WHITE = (1, 1, 1)
-YELLOW = (1, 1, 0)
-BLUE = (0.39, 0.58, 0.93)
-RED = (0.74, 0.15, 0.2)
-DARK_GREY = (0.31, 0.31, 0.32)
-ORANGE = (1, 0.65, 0)
-LIGHT_BLUE = (0.68, 0.85, 0.9)
-LIGHT_GREY = (0.83, 0.83, 0.83)
+    glPushMatrix()
+    drawSun()
 
-class Planet:
-    AU = 149.6e6 * 1000
-    G = 6.67428e-11
-    SCALE = 100 / AU  # 1AU = 100 pixels
-    TIMESTEP = 3600*24 # 1 day
+    glRotatef(year, 0, 1, 0)
+    year = (year + 1) % 360
 
-    def __init__(self, x, y, radius, color, mass):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.color = color
-        self.mass = mass
+    glPushMatrix()
+    drawEarthAndMoon(earth_rot, moon_rot)
+    glPopMatrix()
 
-        self.orbit = []
-        self.sun = False
-        self.distance_to_sun = 0
+    glPopMatrix()
 
-        self.x_vel = 0
-        self.y_vel = 0
+    earth_rot = (earth_rot + 1) % 360
+    moon_rot = (moon_rot + 13) % 360
 
-    def draw(self):
-        glColor3f(*self.color)
-        glBegin(GL_POLYGON)
-        for i in range(360):
-            angle = math.radians(i)
-            glVertex2f(self.x * self.SCALE + self.radius * math.cos(angle), self.y * self.SCALE + self.radius * math.sin(angle))
-        glEnd()
+def ReSizeGLScene(Width, Height):
+    if Height == 0:
+        Height = 1
+    glViewport(0, 0, Width, Height)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(45.0, float(Width)/float(Height), 0.1, 100.0)
+    glMatrixMode(GL_MODELVIEW)
 
-        if len(self.orbit) > 2:
-            glBegin(GL_LINE_STRIP)
-            for point in self.orbit:
-                x, y = point
-                glVertex2f(x * self.SCALE, y * self.SCALE)
-            glEnd()
+def LoadTextures(fname):
+    if textures.get(fname) is not None:
+        return textures.get(fname)
+    texture = textures[fname] = glGenTextures(1)
+    image = Image.open(fname)
+    ix = image.size[0]
+    iy = image.size[1]
+    image = image.tobytes("raw", "RGBX", 0, -1)
 
-    def attraction(self, other):
-        other_x, other_y = other.x, other.y
-        distance_x = other_x - self.x
-        distance_y = other_y - self.y
-        distance = math.sqrt(distance_x ** 2 + distance_y ** 2)
+    glBindTexture(GL_TEXTURE_2D, texture)
 
-        if other.sun:
-            self.distance_to_sun = distance
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+    glTexImage2D(GL_TEXTURE_2D, 0, 3, ix, iy, 0, GL_RGBA, GL_UNSIGNED_BYTE, image)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
+    return texture
 
-        force = self.G * self.mass * other.mass / distance**2
-        theta = math.atan2(distance_y, distance_x)
-        force_x = math.cos(theta) * force
-        force_y = math.sin(theta) * force
-        return force_x, force_y
+def InitGL(Width, Height):
+    glClearColor(0.0, 0.0, 0.0, 0.0)
+    glClearDepth(1.0)
+    glClearStencil(0)
+    glDepthFunc(GL_LEQUAL)
+    glEnable(GL_DEPTH_TEST)
+    glShadeModel(GL_SMOOTH)
 
-    def update_position(self, planets):
-        total_fx = total_fy = 0
-        for planet in planets:
-            if self == planet:
-                continue
+    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST)
+    glEnable(GL_TEXTURE_2D)
 
-            fx, fy = self.attraction(planet)
-            total_fx += fx
-            total_fy += fy
+    glLightfv(GL_LIGHT0, GL_AMBIENT, LightAmb)
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, LightDif)
+    glLightfv(GL_LIGHT0, GL_POSITION, LightPos)
+    glEnable(GL_LIGHT0)
+    glEnable(GL_LIGHTING)
 
-        self.x_vel += total_fx / self.mass * self.TIMESTEP
-        self.y_vel += total_fy / self.mass * self.TIMESTEP
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(45.0, float(Width)/float(Height), 0.1, 100.0)
+    glMatrixMode(GL_MODELVIEW)
 
-        self.x += self.x_vel * self.TIMESTEP
-        self.y += self.y_vel * self.TIMESTEP
-        self.orbit.append((self.x, self.y))
+def drawSun():
+    global Q
+    glColor3f(1, 1, 1)
+    glBindTexture(GL_TEXTURE_2D, LoadTextures("./TexImg/sun.tga"))
 
+    Q = gluNewQuadric()
+    gluQuadricNormals(Q, GLU_SMOOTH)
+    gluQuadricTexture(Q, GL_TRUE)
+    glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
+    glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
+
+    gluSphere(Q, 0.7, 32, 16)
+
+    glColor4f(1, 1, 1, 0.4)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+    glEnable(GL_TEXTURE_GEN_S)
+    glEnable(GL_TEXTURE_GEN_T)
+    gluSphere(Q, 0.7, 32, 16)
+
+    glDisable(GL_TEXTURE_GEN_S)
+    glDisable(GL_TEXTURE_GEN_T)
+    glDisable(GL_BLEND)
+    gluDeleteQuadric(Q)
+
+def drawEarthAndMoon(earth_rot, moon_rot):
+    glColor3f(1, 1, 1)
+    glBindTexture(GL_TEXTURE_2D, LoadTextures("./TexImg/earthmap.bmp"))
+
+    Q = gluNewQuadric()
+    gluQuadricNormals(Q, GLU_SMOOTH)
+    gluQuadricTexture(Q, GL_TRUE)
+    glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
+    glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
+
+    glPushMatrix()
+    glRotatef(earth_rot, 0, 1, 0)
+    glTranslatef(2, 0, 0)
+    gluSphere(Q, 0.4, 32, 16)
+
+    glBindTexture(GL_TEXTURE_2D, LoadTextures("./TexImg/2k_moon.jpg"))
+
+    glRotatef(moon_rot, 0, 1, 0)
+    glTranslatef(0.6, 0, 0)
+    gluSphere(Q, 0.1, 32, 16)
+
+    gluDeleteQuadric(Q)
+    glPopMatrix()
 
 def main():
-    run = True
-    clock = pygame.time.Clock()
+    pg.init()
+    display = (800, 600)
+    pg.display.set_mode(display, pg.DOUBLEBUF | pg.OPENGL)
+    pg.display.set_caption("Solar System Simulation")
+    InitGL(*display)
+    x = y = 0
+    while True:
+        pg.time.Clock().tick(60)
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                quit()
+            if event.type == pg.KEYDOWN:
+                if event.key == pg.K_LEFT:
+                    x += 2
+                if event.key == pg.K_RIGHT:
+                    x -= 2
+                if event.key == pg.K_UP:
+                    y += 2
+                if event.key == pg.K_DOWN:
+                    y -= 2
+                if event.key == pg.K_ESCAPE:
+                    pg.quit()
+                    quit()
 
-    sun = Planet(0, 0, 30, YELLOW, 1.98892 * 10**30)
-    sun.sun = True
-
-    earth = Planet(-1 * Planet.AU, 0, 16, BLUE, 5.9742 * 10**24)
-    earth.y_vel = 29.783 * 1000 
-
-    mars = Planet(-1.524 * Planet.AU, 0, 12, RED, 6.39 * 10**23)
-    mars.y_vel = 24.077 * 1000
-
-    mercury = Planet(0.387 * Planet.AU, 0, 8, DARK_GREY, 3.30 * 10**23)
-    mercury.y_vel = -47.4 * 1000
-
-    venus = Planet(0.723 * Planet.AU, 0, 14, WHITE, 4.8685 * 10**24)
-    venus.y_vel = -35.02 * 1000
-
-    jupiter = Planet(5.2 * Planet.AU, 0, 20, ORANGE, 1.898 * 10**27)
-    jupiter.y_vel = -13.06 * 1000
-
-    saturn = Planet(9.58 * Planet.AU, 0, 18, LIGHT_GREY, 5.683 * 10**26)
-    saturn.y_vel = -9.68 * 1000
-
-    uranus = Planet(19.22 * Planet.AU, 0, 16, LIGHT_BLUE, 8.681 * 10**25)
-    uranus.y_vel = -6.80 * 1000
-
-    neptune = Planet(30.05 * Planet.AU, 0, 16, BLUE, 1.024 * 10**26)
-    neptune.y_vel = -5.43 * 1000
-
-    planets = [sun, earth, mars, mercury, venus, jupiter, saturn, uranus, neptune]
-
-    glOrtho(-WIDTH//2, WIDTH//2, -HEIGHT//2, HEIGHT//2, -1, 1)
-
-    while run:
-        clock.tick(60)
-        glClear(GL_COLOR_BUFFER_BIT)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
-
-        for planet in planets:
-            planet.update_position(planets)
-            planet.draw()
-
-        pygame.display.flip()
-
-    pygame.quit()
+        DrawGLScene(x, y)
+        pg.display.flip()
+        pg.time.wait(10)
 
 main()

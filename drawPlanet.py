@@ -3,39 +3,53 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 from PIL import Image
+import math
 
 textures = {}
-LightAmb=(0.7,0.7,0.7)  
-LightDif=(1.0,1.0,0.0)  
-LightPos=(4.0,4.0,6.0,1.0)
+LightAmb = (0.7, 0.7, 0.7)  
+LightDif = (1.0, 1.0, 0.0)  
+LightPos = (4.0, 4.0, 6.0, 1.0)
 earth_rot = 0.0
 moon_rot = 0.0
-year = 0
-day = 0 
+earth_orbit = 0.0
+moon_orbit = 0.0
+sun_rot = 0.0
+focus_object = None
+camera_distance = 10
 
-def DrawGLScene(x,y):
-    global sun_rot, earth_rot, moon_rot, day, year
+def DrawGLScene(x, y):
+    global earth_rot, moon_rot, earth_orbit, moon_orbit, sun_rot, camera_distance, focus_object
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
+    glTranslatef(0, 0, -camera_distance)
     glRotatef(x, 1, 0, 0)
     glRotatef(y, 0, 1, 0)
 
-    glTranslatef(0, 0, -10)
-
     glPushMatrix()
+    # Sun rotation
+    glRotatef(sun_rot, 0, 1, 0)
     drawSun()
+    glPopMatrix()
 
-    glRotatef(year, 0, 1, 0)
-    year = (year + 1) % 360
-
+    # Earth orbit around the Sun
     glPushMatrix()
+    glRotatef(earth_orbit, 0, 1, 0)
+    glTranslatef(5, 0, 0)
     drawEarthAndMoon(earth_rot, moon_rot)
     glPopMatrix()
-    
-    glPopMatrix() 
+
+    if focus_object == "sun":
+        camera_distance = max(camera_distance - 0.1, 4)
+    elif focus_object == "earth":
+        camera_distance = max(camera_distance - 0.1, 6)
+    else:
+        camera_distance = min(camera_distance + 0.1, 10)
 
     earth_rot = (earth_rot + 1) % 360
     moon_rot = (moon_rot + 13) % 360
+    earth_orbit = (earth_orbit + 0.1) % 360
+    moon_orbit = (moon_orbit + 0.1) % 360
+    sun_rot = (sun_rot + 0.1) % 360  # Adjust this value to control the Sun's rotation speed
 
 def ReSizeGLScene(Width, Height):
     if Height == 0:                        
@@ -48,8 +62,8 @@ def ReSizeGLScene(Width, Height):
     glMatrixMode(GL_MODELVIEW)
 
 def LoadTextures(fname):
-    if textures.get( fname ) is not None:
-        return textures.get( fname )
+    if textures.get(fname) is not None:
+        return textures.get(fname)
     texture = textures[fname] = glGenTextures(1)
     image = Image.open(fname)
 
@@ -59,7 +73,7 @@ def LoadTextures(fname):
        
     glBindTexture(GL_TEXTURE_2D, texture)   
     
-    glPixelStorei(GL_UNPACK_ALIGNMENT,1)
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
     glTexImage2D(GL_TEXTURE_2D, 0, 3, ix, iy, 0, GL_RGBA, GL_UNSIGNED_BYTE, image)
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP)
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP)
@@ -81,7 +95,6 @@ def InitGL(Width, Height):
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST)
     glEnable(GL_TEXTURE_2D)
 
-
     glLightfv(GL_LIGHT0, GL_AMBIENT, LightAmb)
     glLightfv(GL_LIGHT0, GL_DIFFUSE, LightDif)
     glLightfv(GL_LIGHT0, GL_POSITION, LightPos)
@@ -89,11 +102,8 @@ def InitGL(Width, Height):
     glEnable(GL_LIGHTING)
 
     glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()                    # Reset The Projection Matrix
-
-                                                    # Calculate The Aspect Ratio Of The Window
+    glLoadIdentity()                    
     gluPerspective(45.0, float(Width)/float(Height), 0.1, 100.0)
-
     glMatrixMode(GL_MODELVIEW)
 
 def drawSun():
@@ -107,14 +117,14 @@ def drawSun():
     glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
     glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
 
-    gluSphere(Q, 0.7, 32, 16)
+    gluSphere(Q, 1.0, 32, 16)
 
     glColor4f(1, 1, 1, 0.4)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE)
     glEnable(GL_TEXTURE_GEN_S)
     glEnable(GL_TEXTURE_GEN_T)
-    gluSphere(Q, 0.7, 32, 16)
+    gluSphere(Q, 1.0, 32, 16)
 
     glDisable(GL_TEXTURE_GEN_S)
     glDisable(GL_TEXTURE_GEN_T)
@@ -131,22 +141,48 @@ def drawEarthAndMoon(earth_rot, moon_rot):
     glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
     glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_SPHERE_MAP)
 
+    # Draw Earth
     glPushMatrix()
     glRotatef(earth_rot, 0, 1, 0)
-    glTranslatef(2, 0, 0)
     gluSphere(Q, 0.4, 32, 16)
 
+    # Draw Moon
     glBindTexture(GL_TEXTURE_2D, LoadTextures("./TexImg/2k_moon.jpg"))
-
     glRotatef(moon_rot, 0, 1, 0)
-    glTranslatef(0.6, 0, 0)
+    glTranslatef(1, 0, 0)
     gluSphere(Q, 0.1, 32, 16)
 
-    gluDeleteQuadric(Q)
     glPopMatrix()
+    gluDeleteQuadric(Q)
 
+def pickPlanet(x, y):
+    glSelectBuffer(512)
+    glRenderMode(GL_SELECT)
+    glInitNames()
+    glPushName(0)
+
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+
+    viewport = glGetIntegerv(GL_VIEWPORT)
+    gluPickMatrix(x, viewport[3] - y, 5, 5, viewport)
+    gluPerspective(45.0, float(viewport[2])/float(viewport[3]), 0.1, 100.0)
+    glMatrixMode(GL_MODELVIEW)
+
+    DrawGLScene(0, 0)
+
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+    hits = glRenderMode(GL_RENDER)
+
+    if hits:
+        return hits[0][2][0]
+    return None
 
 def main():
+    global focus_object
     pg.init()
     display = (800, 600)
     pg.display.set_mode(display, pg.DOUBLEBUF | pg.OPENGL)
@@ -161,16 +197,20 @@ def main():
                 quit()
             if event.type == pg.KEYDOWN:
                 if event.key == pg.K_LEFT:
-                    x = 2
+                    y += 2
                 if event.key == pg.K_RIGHT:
-                    x = -2
+                    y -= 2
                 if event.key == pg.K_UP:
-                    y = 2 
+                    x += 2 
                 if event.key == pg.K_DOWN:
-                    y = -2
+                    x -= 2
                 if event.key == pg.K_ESCAPE:
                     pg.quit()
                     quit()
+            if event.type == pg.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left mouse button
+                    mouse_x, mouse_y = pg.mouse.get_pos()
+                    focus_object = pickPlanet(mouse_x, mouse_y)
 
         DrawGLScene(x, y)
         pg.display.flip()
