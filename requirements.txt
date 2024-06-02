@@ -2,4 +2,4 @@ pillow
 PyOpenGL
 PyOpenGL PyOpenGL_accelerate
 pygame
-pip install imgui[pygame]
+imgui[pygame]
